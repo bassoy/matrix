@@ -3,7 +3,7 @@
 #include <fstream>
 #include <iomanip> 
 
-#include "matrix.hpp"
+#include "matrix.h"
 
 
 namespace iosb

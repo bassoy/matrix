@@ -1,29 +1,27 @@
-[![C++ Matrix Library]
+# C++ Matrix Template Library
 
-The [C++ Matrix Library] is header-only library with one header file `matrix.h`. 
+The [C++ Matrix Library] is header-only library with one header file `matrix.h` and a `test.cpp` file.
 It provides a matrix template class along with expression templates and generic lambdas of the C++14 standard.
 
-# Using the [C++ Matrix Template Library]
-
-# Requirements
+## Requirements
 
 - compiler supporting the C++14 standard
 - tested with clang 4.0.1 and gcc 7.2.0
 
-# Template class `iosb::matrix`
+## Template class `iosb::matrix`
 
 - template parameters `<T,M,N>` where `T` is the type, `M` and `N` the number of rows and columns of the matrix
 - stores elements in column-major storage format (this could be generalized)
 
 
-# Overloaded operators
+## Overloaded operators
 
 - elementwise arithmetic operators `+`,`-`,`*`,`/` with scalars and matrices
 - elementwise assignment operators `+=`,`-=`,`*=`,`/=` with scalars and matrices
 - matrix-multiplication operator `|`
 - matrix-transposition operator `!`
 
-# Testing and profiling
+## Testing and profiling
 
 - uses openmp if `-fopenmp` flag is provided
 - compile with `clang++ -Wall -Werror -std=c++14 -O3 -fopenmp -march=native test.cpp -o test` or

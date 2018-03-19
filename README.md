@@ -13,6 +13,13 @@ It provides a matrix template class along with expression templates and generic 
 - has template parameters `<T,M,N>` where `T` is the type, `M` and `N` the number of rows and columns of the matrix
 - stores elements in column-major storage format (this could be generalized)
 
+## Template class `iosb::timer`
+
+- encapsulates `std::chrono::high_resolution_clock` for convenient runtime measurements.
+- has one template parameter `D` which can be e.g. of type `iosb::nanoseconds` or `iosb::seconds`
+- simply wrap your expression with the static methods `tic()` and `toc()` to measure runtime.
+
+
 
 ## Overloaded operators
 

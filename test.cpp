@@ -17,7 +17,7 @@ template<class D>
 class timer
 {
 public:
-	using clock = typename std::chrono::high_resolution_clock;
+	using clock = std::chrono::high_resolution_clock;
 	using point = typename clock::time_point;
 	
     static void tic() { _start = clock::now(); }

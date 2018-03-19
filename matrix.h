@@ -12,7 +12,8 @@
 // - fit in one header file
 // - provides a test program which can measure its speed of execution for each examples provided
 
-namespace iosb::detail {
+namespace iosb {
+namespace detail {
 
 // \brief expression class for expression templates
 //
@@ -45,6 +46,7 @@ private:
 // \brief helper function to simply instantiation of lambda proxy class 
 template<class T, std::size_t M, std::size_t N,  class F>
 auto make_lambda( F&& f ) { return lambda<T,M,N,F>(std::forward<F>(f)); }
+}
 }
 
 

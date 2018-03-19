@@ -10,7 +10,7 @@ It provides a matrix template class along with expression templates and generic 
 
 ## Template class `iosb::matrix`
 
-- template parameters `<T,M,N>` where `T` is the type, `M` and `N` the number of rows and columns of the matrix
+- has template parameters `<T,M,N>` where `T` is the type, `M` and `N` the number of rows and columns of the matrix
 - stores elements in column-major storage format (this could be generalized)
 
 

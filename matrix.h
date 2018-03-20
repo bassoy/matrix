@@ -19,76 +19,91 @@ namespace detail {
 //
 // \note implements crtp - use of virtual function calls
 // 
-// \tparam T element type of matrices and scalars of the expression
+// \tparam M matrix type for the expression
 // \tparam D derived type that can be matrices or generic lambda functions. Must support operator()(std::size_t i)
-template<class T, std::size_t M, std::size_t N, class D>
+template<class M, class D>
 struct expression
 {
+	using matrix_type = M;
 	decltype(auto) operator()(std::size_t i) const { return static_cast<const D&>(*this)(i); }
 	decltype(auto) operator()(std::size_t i)       { return static_cast<      D&>(*this)(i); }
 };
+
+
 // \brief proxy class for encapsulating generic lambdas
 // 
-// \tparam T element type of matrices and scalars of the expression
+// \tparam M matrix type for the lambda function
 // \tparam F type of lambda function that is encapsulated
-template<class T, std::size_t M, std::size_t N, class F>
-class lambda : public expression <T,M,N,lambda<T,M,N,F> >
+template<class M, class F>
+class lambda : public expression <M,lambda<M,F>>
 {
 public:
-	using value_type = T;
-	using expr_type  = expression <T,M,N,lambda<T,M,N,F> >;
-	explicit lambda(F const& f)  : expr_type{}, _f{ f }  {}
+	explicit lambda(F const& f)  : expression <M,lambda<M,F>>{}, _f{ f }  {}
 	decltype(auto) operator()(std::size_t i) const { return _f(i); }
 	decltype(auto) operator()(std::size_t i)       { return _f(i); }
 private:
 	F _f;
 };
 // \brief helper function to simply instantiation of lambda proxy class 
-template<class T, std::size_t M, std::size_t N,  class F>
-auto make_lambda( F&& f ) { return lambda<T,M,N,F>(std::forward<F>(f)); }
+template<class M, class F>
+auto make_lambda( F&& f ) { return lambda<M,F>(std::forward<F>(f)); }
+
 }
 }
 
 
 namespace iosb 
 {
+
+namespace storage 
+{
+struct column_major {};
+struct row_major    {};
+}
+
 // \brief matrix class
 // 
-// \note here we have column-major storage format
 // 
-// \tparam T element type
+// \tparam E element type
 // \tparam M number of rows
 // \tparam N number of columns
-template<class T, std::size_t M, std::size_t N>
-class matrix : public detail::expression<T,M,N,matrix<T,M,N> >
+// \tparam S storage format which can be column_major or row_major
+template<class E, std::size_t M, std::size_t N, class S = storage::column_major>
+class matrix : public detail::expression<matrix<E,M,N,S>,matrix<E,M,N,S>>
 {
 public:
-	using array_type = std::vector<T>; // std::array<T,M,N> <- also possible.
-	using expr_type  = detail::expression<T,M,N,matrix<T,M,N>>;
-	using value_type = typename array_type::value_type;
+	using value_type = E;
+	using storage_tag = S;
+	using array_type = std::vector<value_type>; // std::array<T,M,N> <- also possible.	
 	using reference  = typename array_type::reference;
 	using const_reference = typename array_type::const_reference;
 	using pointer = typename array_type::pointer;
 	using const_pointer = typename array_type::const_pointer;
+	
+	template<class D>	
+	using expression_type  = detail::expression<matrix,D>;
+	using base_type = expression_type<matrix>;
+
 		
-	explicit constexpr matrix() : expr_type{}, _array(M*N,T{}) {}
+	explicit constexpr matrix() : base_type{}, _array(this->size(),value_type{}) {}
 	template<class D>
-	matrix(detail::expression<T,M,N,D> const& other) : expr_type{}, _array(M*N,T{}) { this->eval(other);}
-	matrix(matrix&& other) : expr_type{}, _array{std::move(other._array)} {}	
+	matrix(expression_type<D> const& other) : base_type{}, _array(this->size(),value_type{}) { this->eval(other);}
+	matrix(matrix&& other) : base_type{}, _array{std::move(other._array)} {}	
 	
 	matrix& operator=(matrix other)
 	{
-   		other.swap (*this);
+   		swap(*this, other);
 		return *this;
 	}
 	
-	friend void swap(matrix& lhs, matrix& rhs){
+	friend void swap(matrix& lhs, matrix& rhs)
+	{
 		using std::swap; 
 		swap(lhs._array, rhs._array);
     }	
 
 	template<class D>
-	matrix& operator=(detail::expression<T,M,N,D> const& other)
+	matrix& operator=(expression_type<D> const& other)
 	{
 		this->eval(other);
 		return *this;
@@ -99,18 +114,26 @@ public:
 	const_reference operator()(std::size_t i) const { return _array[i]; }
           reference operator()(std::size_t i)       { return _array[i]; }
 	
-	const_reference at(std::size_t ri, std::size_t ci) const { return _array[ri + this->rows() * ci]; }
-	      reference at(std::size_t ri, std::size_t ci)       { return _array[ri + this->rows() * ci]; }
+	const_reference at(std::size_t ri, std::size_t ci) const { return _array[this->to_index(ri,ci)]; }
+	      reference at(std::size_t ri, std::size_t ci)       { return _array[this->to_index(ri,ci)]; }
 	      	
-	constexpr auto size() const { return M*N; }
+	constexpr auto size() const { return this->rows()*this->cols(); }
 	constexpr auto rows() const { return M; }
 	constexpr auto cols() const { return N; }
 	
 	
 private:
 
+	constexpr std::size_t to_index(std::size_t ri, std::size_t ci) const
+	{
+		if constexpr (std::is_same<storage_tag,storage::column_major>::value)
+			return ri + this->rows() * ci;
+		else
+			return this->cols() * ri + ci;
+	}
+
 	template<class D>
-	void eval(detail::expression<T,M,N,D> const& other)
+	void eval(expression_type<D> const& other)
 	{
 		#pragma omp parallel for
 		for(auto i = 0u; i < this->size(); ++i)
@@ -124,10 +147,10 @@ private:
 
 namespace iosb 
 {
-template<class T, std::size_t M, std::size_t N, class D>
-auto make_matrix(detail::expression<T,M,N,D> const& other)
+template<class M, class D>
+auto make_matrix(detail::expression<M,D> const& other)
 {
-	return matrix<T,M,N>{other};
+	return typename detail::expression<M,D>::matrix_type{other};
 }
 }
 
@@ -135,8 +158,8 @@ auto make_matrix(detail::expression<T,M,N,D> const& other)
 // ********* Free Functions ***********
 
 // Matlab Output
-template<class T, std::size_t M, std::size_t N>
-std::ostream& operator<<(std::ostream& out, iosb::matrix<T,M,N> const& m)
+template<class E, std::size_t M, std::size_t N, class S>
+std::ostream& operator<<(std::ostream& out, iosb::matrix<E,M,N,S> const& m)
 {
 	out << "[ ... " << std::endl;
 	for(auto ri = 0u; ri < m.rows(); ++ri){
@@ -149,133 +172,144 @@ std::ostream& operator<<(std::ostream& out, iosb::matrix<T,M,N> const& m)
 }
 
 // Matrix Transpose
-template<class T, std::size_t M, std::size_t N>
-auto operator!(iosb::matrix<T,M,N> const& lhs) 
+template<class E, class S, std::size_t M, std::size_t N>
+auto operator!(iosb::matrix<E,M,N,S> const& lhs) 
 {
-	iosb::matrix<T,N,M> res{};
+	iosb::matrix<E,M,N,S> res{};
 	
-	for(auto n = 0u; n < N; ++n)
-		for(auto m = 0u; m < M; ++m)
+	for(auto n = 0u; n < res.cols(); ++n)
+		for(auto m = 0u; m < res.rows(); ++m)
 			res.at(n,m) = lhs.at(m,n);
 	
 	return res;
 }
 
-// Matrix Matrix Multiplikation
-template<class T, std::size_t M, std::size_t N, std::size_t K>
-auto operator|(iosb::matrix<T,M,K> const& lhs, iosb::matrix<T,K,N> const& rhs) 
+template<class M,class D>
+auto operator!(iosb::detail::expression<M,D> const& lhs) 
 {
-	iosb::matrix<T,M,N> res{};
+	return !typename iosb::detail::expression<M,D>::matrix_type{lhs};
+}
+
+
+// Matrix Matrix Multiplikation
+template<class E, class S, std::size_t M, std::size_t N, std::size_t K>
+auto operator|(iosb::matrix<E,M,K,S> const& lhs, iosb::matrix<E,K,N,S> const& rhs) 
+{
+	auto res = iosb::matrix<E,M,N,S>{};
 	
-	#pragma omp parallel for
-	for(auto n = 0u; n < N; ++n)
-		for(auto k = 0u; k < K; ++k)
-			for(auto m = 0u; m < M; ++m)
-				res.at(m,n) += lhs.at(m,k) * rhs.at(k,n);
+	if constexpr (std::is_same<S,iosb::storage::column_major>::value)
+	{	
+		#pragma omp parallel for
+		for(auto n = 0u; n < N; ++n)
+			for(auto k = 0u; k < K; ++k)
+				for(auto m = 0u; m < M; ++m)
+					res.at(m,n) += lhs.at(m,k) * rhs.at(k,n);
+	}
+	else
+	{
+		#pragma omp parallel for
+		for(auto m = 0u; m < M; ++m)
+			for(auto k = 0u; k < K; ++k)			
+				for(auto n = 0u; n < N; ++n)
+					res.at(m,n) += lhs.at(m,k) * rhs.at(k,n);	
+	}
 	return res;
 }
 
-template<class T, std::size_t M, std::size_t N, std::size_t K, class L, class R>
-auto operator|(iosb::detail::expression<T,M,K,L> const& lhs, iosb::detail::expression<T,K,N,R> const& rhs) 
+
+template<class ML, class MR, class L, class R>
+auto operator|(iosb::detail::expression<ML,L> const& lhs, iosb::detail::expression<MR,R> const& rhs) 
 {
-	return iosb::matrix<T,M,K>{lhs}|iosb::matrix<T,K,N>{rhs};
+	return typename iosb::detail::expression<ML,L>::matrix_type{lhs}| typename iosb::detail::expression<MR,L>::matrix_type{rhs};
 }
 
 
 
 // Overloaded arithmetic operators with matrices
-template<class T, std::size_t M, std::size_t N, class L, class R>
-auto operator+(iosb::detail::expression<T,M,N,L> const& lhs,iosb::detail::expression<T,M,N,R> const& rhs) 
+template<class M, class L, class R>
+auto operator+(iosb::detail::expression<M,L> const& lhs, iosb::detail::expression<M,R> const& rhs) 
 {
-	return iosb::detail::make_lambda<T,M,N>([&lhs,&rhs](std::size_t i){ return lhs(i) + rhs(i);});
+	return iosb::detail::make_lambda<M>([&lhs,&rhs](std::size_t i){ return lhs(i) + rhs(i);});
 }
-
-template<class T, std::size_t M, std::size_t N, class L, class R>
-auto operator-(iosb::detail::expression<T,M,N,L> const& lhs,iosb::detail::expression<T,M,N,R> const& rhs) 
+template<class M, class L, class R>
+auto operator-(iosb::detail::expression<M,L> const& lhs, iosb::detail::expression<M,R> const& rhs) 
 {
-	return iosb::detail::make_lambda<T,M,N>([&lhs,&rhs](std::size_t i){ return lhs(i) - rhs(i);});
+	return iosb::detail::make_lambda<M>([&lhs,&rhs](std::size_t i){ return lhs(i) - rhs(i);});
 }
-
-template<class T, std::size_t M, std::size_t N, class L, class R>
-auto operator*(iosb::detail::expression<T,M,N,L> const& lhs,iosb::detail::expression<T,M,N,R> const& rhs) 
+template<class M, class L, class R>
+auto operator*(iosb::detail::expression<M,L> const& lhs, iosb::detail::expression<M,R> const& rhs) 
 {
-	return iosb::detail::make_lambda<T,M,N>([&lhs,&rhs](std::size_t i){ return lhs(i) * rhs(i);});
+	return iosb::detail::make_lambda<M>([&lhs,&rhs](std::size_t i){ return lhs(i) * rhs(i);});
 }
-
-template<class T, std::size_t M, std::size_t N, class L, class R>
-auto operator/(iosb::detail::expression<T,M,N,L> const& lhs,iosb::detail::expression<T,M,N,R> const& rhs) 
+template<class M, class L, class R>
+auto operator/(iosb::detail::expression<M,L> const& lhs, iosb::detail::expression<M,R> const& rhs) 
 {
-	return iosb::detail::make_lambda<T,M,N>([&lhs,&rhs](std::size_t i){ return lhs(i) / rhs(i);});
+	return iosb::detail::make_lambda<M>([&lhs,&rhs](std::size_t i){ return lhs(i) / rhs(i);});
 }
 
 // Overloaded Arithmetic Operators with Scalars
-template<class T, std::size_t M, std::size_t N, class R>
-auto operator+(T const& lhs, iosb::detail::expression<T,M,N,R> const& rhs) 
+template<class M, class R>
+auto operator+(typename iosb::detail::expression<M,R>::matrix_type::const_reference lhs, iosb::detail::expression<M,R> const& rhs) 
 {
-	return iosb::detail::make_lambda<T,M,N> ( [&lhs,&rhs](std::size_t i) {return lhs + rhs(i); } );  
+	return iosb::detail::make_lambda<M>( [&lhs,&rhs](std::size_t i) {return lhs + rhs(i); } );  
+}
+template<class M, class R>
+auto operator-(typename iosb::detail::expression<M,R>::matrix_type::const_reference lhs, iosb::detail::expression<M,R> const& rhs) 
+{
+	return iosb::detail::make_lambda<M>( [&lhs,&rhs](std::size_t i) {return lhs - rhs(i); } );
+}
+template<class M, class R>
+auto operator*(typename iosb::detail::expression<M,R>::matrix_type::const_reference lhs, iosb::detail::expression<M,R> const& rhs) 
+{
+	return iosb::detail::make_lambda<M> ( [&lhs,&rhs](std::size_t i) {return lhs * rhs(i); } );
+}
+template<class M, class R>
+auto operator/(typename iosb::detail::expression<M,R>::matrix_type::const_reference lhs, iosb::detail::expression<M,R> const& rhs) 
+{
+	return iosb::detail::make_lambda<M> ( [&lhs,&rhs](std::size_t i) {return lhs / rhs(i); } );
+}
+template<class M, class L>
+auto operator+(iosb::detail::expression<M,L> const& lhs, typename iosb::detail::expression<M,L>::matrix_type::const_reference rhs) 
+{
+	return iosb::detail::make_lambda<M> ( [&lhs,&rhs](std::size_t i) {return lhs(i) + rhs; } );
+}
+template<class M, class L>
+auto operator-(iosb::detail::expression<M,L> const& lhs, typename iosb::detail::expression<M,L>::matrix_type::const_reference rhs) 
+{
+	return iosb::detail::make_lambda<M> ( [&lhs,&rhs](std::size_t i) {return lhs(i) - rhs; } );
+}
+template<class M, class L>
+auto operator*(iosb::detail::expression<M,L> const& lhs, typename iosb::detail::expression<M,L>::matrix_type::const_reference rhs) 
+{
+	return iosb::detail::make_lambda<M> ( [&lhs,&rhs](std::size_t i) {return lhs(i) * rhs; } );
+}
+template<class M, class L>
+auto operator/(iosb::detail::expression<M,L> const& lhs, typename iosb::detail::expression<M,L>::matrix_type::const_reference rhs) 
+{
+	return iosb::detail::make_lambda<M> ( [&lhs,&rhs](std::size_t i) {return lhs(i) / rhs; } );
 }
 
-template<class T, std::size_t M, std::size_t N, class R>
-auto operator-(T const& lhs, iosb::detail::expression<T,M,N,R> const& rhs) 
-{
-	return iosb::detail::make_lambda<T,M,N> ( [&lhs,&rhs](std::size_t i) {return lhs - rhs(i); } );
-}
 
-template<class T, std::size_t M, std::size_t N, class R>
-auto operator*(T const& lhs, iosb::detail::expression<T,M,N,R> const& rhs) 
-{
-	return iosb::detail::make_lambda<T,M,N> ( [&lhs,&rhs](std::size_t i) {return lhs * rhs(i); } );
-}
-
-template<class T, std::size_t M, std::size_t N, class R>
-auto operator/(T const& lhs, iosb::detail::expression<T,M,N,R> const& rhs) 
-{
-	return iosb::detail::make_lambda<T,M,N> ( [&lhs,&rhs](std::size_t i) {return lhs / rhs(i); } );
-}
-
-template<class T, std::size_t M, std::size_t N, class L>
-auto operator+(iosb::detail::expression<T,M,N,L> const& lhs, T const& rhs) 
-{
-	return iosb::detail::make_lambda<T,M,N> ( [&lhs,&rhs](std::size_t i) {return lhs(i) + rhs; } );
-}
-
-template<class T, std::size_t M, std::size_t N, class L>
-auto operator-(iosb::detail::expression<T,M,N,L> const& lhs, T const& rhs) 
-{
-	return iosb::detail::make_lambda<T,M,N> ( [&lhs,&rhs](std::size_t i) {return lhs(i) - rhs; } );
-}
-
-template<class T, std::size_t M, std::size_t N, class L>
-auto operator*(iosb::detail::expression<T,M,N,L> const& lhs, T const& rhs) 
-{
-	return iosb::detail::make_lambda<T,M,N> ( [&lhs,&rhs](std::size_t i) {return lhs(i) * rhs; } );
-}
-
-template<class T, std::size_t M, std::size_t N, class L>
-auto operator/(iosb::detail::expression<T,M,N,L> const& lhs, T const& rhs) 
-{
-	return iosb::detail::make_lambda<T,M,N> ( [&lhs,&rhs](std::size_t i) {return lhs(i) / rhs; } );
-}
 
 
 // Overloaded Assignment Operators
-template<class T, std::size_t M, std::size_t N, class R>
-decltype(auto) operator+=(iosb::matrix<T,M,N>& lhs, iosb::detail::expression<T,M,N,R> const& rhs) { return lhs = lhs + rhs;  }
-template<class T, std::size_t M, std::size_t N, class R>
-decltype(auto) operator-=(iosb::matrix<T,M,N>& lhs, iosb::detail::expression<T,M,N,R> const& rhs) { return lhs = lhs - rhs;  }
-template<class T, std::size_t M, std::size_t N, class R>
-decltype(auto) operator*=(iosb::matrix<T,M,N>& lhs, iosb::detail::expression<T,M,N,R> const& rhs) { return lhs = lhs * rhs;  }
-template<class T, std::size_t M, std::size_t N, class R>
-decltype(auto) operator/=(iosb::matrix<T,M,N>& lhs, iosb::detail::expression<T,M,N,R> const& rhs) { return lhs = lhs / rhs;  }
+template<class M, class R>
+decltype(auto) operator+=(typename iosb::detail::expression<M,R>::matrix_type& lhs, iosb::detail::expression<M,R> const& rhs) { return lhs = lhs + rhs;  }
+template<class M, class R>
+decltype(auto) operator-=(typename iosb::detail::expression<M,R>::matrix_type& lhs, iosb::detail::expression<M,R> const& rhs) { return lhs = lhs - rhs;  }
+template<class M, class R>
+decltype(auto) operator*=(typename iosb::detail::expression<M,R>::matrix_type& lhs, iosb::detail::expression<M,R> const& rhs) { return lhs = lhs * rhs;  }
+template<class M, class R>
+decltype(auto) operator/=(typename iosb::detail::expression<M,R>::matrix_type& lhs, iosb::detail::expression<M,R> const& rhs) { return lhs = lhs / rhs;  }
 
 // Overloaded Assignment Operators
-template<class T, std::size_t M, std::size_t N>
-decltype(auto) operator+=(iosb::matrix<T,M,N>& lhs, T const& rhs) { return lhs = lhs + rhs;  }
-template<class T, std::size_t M, std::size_t N, class R>
-decltype(auto) operator-=(iosb::matrix<T,M,N>& lhs, T const& rhs) { return lhs = lhs - rhs;  }
-template<class T, std::size_t M, std::size_t N, class R>
-decltype(auto) operator*=(iosb::matrix<T,M,N>& lhs, T const& rhs) { return lhs = lhs * rhs;  }
-template<class T, std::size_t M, std::size_t N, class R>
-decltype(auto) operator/=(iosb::matrix<T,M,N>& lhs, T const& rhs) { return lhs = lhs / rhs;  }
+template<class E, class S, std::size_t M, std::size_t N>
+decltype(auto) operator+=(iosb::matrix<E,M,N,S>& lhs, typename iosb::matrix<E,M,N,S>::const_reference rhs) { return lhs = lhs + rhs;  }
+template<class E, class S, std::size_t M, std::size_t N>
+decltype(auto) operator-=(iosb::matrix<E,M,N,S>& lhs, typename iosb::matrix<E,M,N,S>::const_reference rhs) { return lhs = lhs - rhs;  }
+template<class E, class S, std::size_t M, std::size_t N>
+decltype(auto) operator*=(iosb::matrix<E,M,N,S>& lhs, typename iosb::matrix<E,M,N,S>::const_reference rhs) { return lhs = lhs * rhs;  }
+template<class E, class S, std::size_t M, std::size_t N>
+decltype(auto) operator/=(iosb::matrix<E,M,N,S>& lhs, typename iosb::matrix<E,M,N,S>::const_reference rhs) { return lhs = lhs / rhs;  }
 
 #endif

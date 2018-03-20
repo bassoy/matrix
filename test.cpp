@@ -2,6 +2,7 @@
 #include <chrono>
 #include <fstream>
 #include <iomanip> 
+#include <limits>
 
 #include "timer.h"
 #include "matrix.h"
@@ -11,9 +12,11 @@
 
 int main()
 {
-	constexpr auto m = 1000u, n = 1000u;
-	using matrix = iosb::matrix<double,m,n>;
-	using timer  = iosb::timer<iosb::milliseconds>;
+	constexpr auto m = 2000u, n = 2000u;
+	using type    = double;
+	using storage = iosb::storage::row_major;
+	using matrix  = iosb::matrix<type,m,n,storage>;
+	using timer   = iosb::timer<iosb::milliseconds>;
 	
 	auto A = matrix{}, 
 	     B = matrix{};
@@ -22,31 +25,31 @@ int main()
 		for(auto ci = 0u; ci < A.cols(); ++ci)
 			A.at(ri,ci) = k++, B.at(ri,ci) = j++;
 	
-	timer::tic();
+	timer::tic();	
 	matrix D = A|B;
 	timer::toc();
-	std::cout << "Expression[AxB], " << "Time[ms]: "<< timer::elapsed() << "[ms]" << std::endl;
+	std::cout << "Expression[AxB], " << "Time[ms]: "<< timer::elapsed() << std::endl;
 	
 	timer::tic();
 	matrix E = 2.0 * A - B + B - 4.0*D;
 	timer::toc();
-	std::cout << "Expression[2.0 * A - B + B- 4.0*D], " << "Time[ms]: "<< timer::elapsed() << "[ms]" << std::endl;
+	std::cout << "Expression[2.0 * A - B + B- 4.0*D], " << "Time[ms]: "<< timer::elapsed() << std::endl;
 	
 	timer::tic();
 	matrix F = 2.0 * (A|B) + B + B - 4.0*D + 3.0*E;
 	timer::toc();
-	std::cout << "Expression[2.0 * AxB + B + B - D- 4.0*D + 3.0*E], " << "Time[ms]: "<< timer::elapsed() << "[ms]" << std::endl;
+	std::cout << "Expression[2.0 * AxB + B + B - D- 4.0*D + 3.0*E], " << "Time[ms]: "<< timer::elapsed() << std::endl;
 		
 	timer::tic();
 	matrix G = (2.0 * A)|(F + B + B -4.0*D + 3.0*E);
 	timer::toc();
-	std::cout << "Expression[(2.0 * A)x(F + B + B - 4.0*D + 3.0*E)], " << "Time[ms]: "<< timer::elapsed() << "[ms]" << std::endl;
+	std::cout << "Expression[(2.0 * A)x(F + B + B - 4.0*D + 3.0*E)], " << "Time[ms]: "<< timer::elapsed() << std::endl;
 		
 	
-	if(m<15 && n<15)
+	if(m<20 && n<20)
 	{
 		std::ofstream out("check.m");
-		out << std::setprecision(15);
+		out << std::setprecision(std::numeric_limits<type>::max_digits10);
 		out << "A=" << A << std::endl;
 		out << "B=" << B << std::endl;
 		out << "D=" << D << std::endl;

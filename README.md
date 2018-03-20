@@ -11,7 +11,7 @@ The `matrix.h` header file provides a matrix template class along with expressio
 ## Template class `iosb::matrix`
 
 - has template parameters `<E,M,N,S>` where `E` is the element type, `S`, is the storage format, `M` and `N` the number of rows and columns of the matrix
-- stores elements either in column-major or row-major storage format
+- stores elements using `std::vector<E>` either in column-major or row-major storage format
 
 ## Template class `iosb::timer`
 

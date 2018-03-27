@@ -13,10 +13,12 @@
 int main()
 {
 	constexpr auto m = 2000u, n = 2000u;
-	using type    = double;
-	using storage = iosb::storage::row_major;
+	using type    = float;
+	using storage = iosb::storage::row_major; //iosb::storage::col_major;
 	using matrix  = iosb::matrix<type,m,n,storage>;
 	using timer   = iosb::timer<iosb::milliseconds>;
+
+	constexpr auto mmul_ops = static_cast<double>(m*n*(2*n-1));
 	
 	auto A = matrix{}, 
 	     B = matrix{};
@@ -28,7 +30,7 @@ int main()
 	timer::tic();	
 	matrix D = A|B;
 	timer::toc();
-	std::cout << "Expression[AxB], " << "Time[ms]: "<< timer::elapsed() << std::endl;
+	std::cout << "Expression[AxB], " << "Time[ms]: "<< timer::elapsed() << ", Performance[GFLOP]: " << mmul_ops/timer::elapsed<iosb::nanoseconds>().count() << std::endl;
 	
 	timer::tic();
 	matrix E = 2.0 * A - B + B - 4.0*D;

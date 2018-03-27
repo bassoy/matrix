@@ -6,14 +6,21 @@
 #include <ostream>
 #include <complex>
 #include <vector>
+#include <type_traits>
 
 // - represent a matrix of numerical types (int, long, float, double, complex,....)
 // - compute algebraic expressions including + and *, += and *=. Matrix multiplication can be implemented with the most simple algorithm
 // - fit in one header file
 // - provides a test program which can measure its speed of execution for each examples provided
 
-namespace iosb {
-namespace detail {
+namespace iosb::storage
+{
+struct column_major {};
+struct row_major    {};
+}
+
+
+namespace iosb::detail {
 
 // \brief expression class for expression templates
 //
@@ -48,18 +55,30 @@ private:
 template<class M, class F>
 auto make_lambda( F&& f ) { return lambda<M,F>(std::forward<F>(f)); }
 
+
+
+template<class S, std::size_t M, std::size_t N>
+struct index_mapper
+{
+	static constexpr auto is_column_major = std::is_same_v<S,::iosb::storage::column_major>;
+	static constexpr auto is_row_major    = std::is_same_v<S,::iosb::storage::row_major>;
+	static_assert(is_column_major || is_row_major, "IndexMapper requires the row or column major tag.");
+	static inline constexpr auto wi = is_column_major ? 1 : N;
+	static inline constexpr auto wj = is_column_major ? M : 1;
+	static inline constexpr auto at(std::size_t i, std::size_t j) { return i * wi + j * wj; }
+};
+
+
 }
-}
+
+
+
+
+
 
 
 namespace iosb 
 {
-
-namespace storage 
-{
-struct column_major {};
-struct row_major    {};
-}
 
 // \brief matrix class
 // 
@@ -79,11 +98,12 @@ public:
 	using const_reference = typename array_type::const_reference;
 	using pointer = typename array_type::pointer;
 	using const_pointer = typename array_type::const_pointer;
+
 	
 	template<class D>	
 	using expression_type  = detail::expression<matrix,D>;
 	using base_type = expression_type<matrix>;
-
+	using index_mapper_type = detail::index_mapper<storage_tag,M,N>;
 		
 	explicit constexpr matrix() : base_type{}, _array(this->size(),value_type{}) {}
 	template<class D>
@@ -111,11 +131,11 @@ public:
 	
 	~matrix() = default;
 	
-	const_reference operator()(std::size_t i) const { return _array[i]; }
-          reference operator()(std::size_t i)       { return _array[i]; }
+	inline const_reference operator()(std::size_t i) const { return _array[i]; }
+        inline       reference operator()(std::size_t i)       { return _array[i]; }
 	
-	const_reference at(std::size_t ri, std::size_t ci) const { return _array[this->to_index(ri,ci)]; }
-	      reference at(std::size_t ri, std::size_t ci)       { return _array[this->to_index(ri,ci)]; }
+	inline const_reference at(std::size_t ri, std::size_t ci) const { return _array[index_mapper_type::at(ri,ci)]; }
+	inline       reference at(std::size_t ri, std::size_t ci)       { return _array[index_mapper_type::at(ri,ci)]; }
 	      	
 	constexpr auto size() const { return this->rows()*this->cols(); }
 	constexpr auto rows() const { return M; }
@@ -123,14 +143,6 @@ public:
 	
 	
 private:
-
-	constexpr std::size_t to_index(std::size_t ri, std::size_t ci) const
-	{
-		if constexpr (std::is_same<storage_tag,storage::column_major>::value)
-			return ri + this->rows() * ci;
-		else
-			return this->cols() * ri + ci;
-	}
 
 	template<class D>
 	void eval(expression_type<D> const& other)

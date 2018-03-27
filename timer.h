@@ -16,19 +16,19 @@ public:
 	using clock = std::chrono::high_resolution_clock;
 	using point = typename clock::time_point;
 	
-    static void tic() { _start = clock::now(); }
-    static void toc() { _stop  = clock::now(); }
+	static void tic() { _start = clock::now(); }
+	static void toc() { _stop  = clock::now(); }
 
-    static auto elapsed() { return std::chrono::duration_cast<D>( _stop - _start ); }
+	static auto elapsed() { return std::chrono::duration_cast<D>( _stop - _start ); }
 
 	template<class O>
-    static auto elapsed() { return std::chrono::duration_cast<O>( _stop - _start ); }
+	static auto elapsed() { return std::chrono::duration_cast<O>( _stop - _start ); }
 
-    static point start() { return _start; }
-    static point stop() { return _stop; }
+	static inline point start() { return _start; }
+	static inline point stop() { return _stop; }
 private:
-    static point _start;
-    static point _stop;
+	static point _start;
+	static point _stop;
 };
 template<class D> typename timer<D>::point timer<D>::_start;
 template<class D> typename timer<D>::point timer<D>::_stop;

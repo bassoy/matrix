@@ -60,8 +60,8 @@ auto make_lambda( F&& f ) { return lambda<M,F>(std::forward<F>(f)); }
 template<class S, std::size_t M, std::size_t N>
 struct index_mapper
 {
-	static constexpr auto is_column_major = std::is_same_v<S,::iosb::storage::column_major>;
-	static constexpr auto is_row_major    = std::is_same_v<S,::iosb::storage::row_major>;
+	static constexpr auto is_column_major = std::is_same<S,::iosb::storage::column_major>::value;
+	static constexpr auto is_row_major    = std::is_same<S,::iosb::storage::row_major>::value;
 	static_assert(is_column_major || is_row_major, "IndexMapper requires the row or column major tag.");
 	static inline constexpr auto wi = is_column_major ? 1 : N;
 	static inline constexpr auto wj = is_column_major ? M : 1;
@@ -187,7 +187,7 @@ std::ostream& operator<<(std::ostream& out, iosb::matrix<E,M,N,S> const& m)
 template<class E, class S, std::size_t M, std::size_t N>
 auto operator!(iosb::matrix<E,M,N,S> const& lhs) 
 {
-	iosb::matrix<E,M,N,S> res{};
+	iosb::matrix<E,N,M,S> res{};
 	
 	for(auto n = 0u; n < res.cols(); ++n)
 		for(auto m = 0u; m < res.rows(); ++m)
@@ -195,6 +195,34 @@ auto operator!(iosb::matrix<E,M,N,S> const& lhs)
 	
 	return res;
 }
+
+
+// Matrix Transpose
+template<class E, class S, std::size_t M, std::size_t N, std::size_t Mh, std::size_t Nh>
+auto blocked_transpose(iosb::matrix<E,M,N,S> const& lhs) 
+{
+	
+	iosb::matrix<E,N,M,S> res{};
+	
+	constexpr auto M_ = M/Mh;
+	constexpr auto N_ = N/Nh;
+	
+	if constexpr (std::is_same<S,iosb::storage::column_major>::value)
+	{
+		
+		for(auto m_ = 0u; m_ < M_; ++m_)
+			for(auto n_ = 0u; n_ < N_; ++n_)
+				for(auto m = m_ * Mh; m < (m_*Mh + Mh); ++m)
+					for(auto n = n_ * Nh; n < (n_*Nh + Nh); ++n)
+						res.at(n,m) = lhs.at(m,n);						
+	}
+	else
+	{
+		
+	}
+	return res;
+}
+
 
 template<class M,class D>
 auto operator!(iosb::detail::expression<M,D> const& lhs) 

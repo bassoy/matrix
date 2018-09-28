@@ -31,7 +31,7 @@ The `matrix.h` header file provides a matrix template class along with expressio
 ## Testing and profiling
 
 - uses openmp if `-fopenmp` flag is provided
-- compile with `clang++ -Wall -Werror -std=c++1z -O3 -fopenmp -march=native test.cpp -o test` or
-- compile with `g++ -Wall -Werror -std=c++1z -fopenmp -march=native -O3 test.cpp -o test`
+- compile with `clang++ -Wall -Werror -std=c++17 -O3 -fopenmp -march=native test.cpp -o test` or
+- compile with `g++ -Wall -Werror -std=c++17 -fopenmp -march=native -O3 test.cpp -o test`
 - outputs the runtime of multiple matrix expressions 
 - for smaller dimensions the `test` programm produces a `check.m` script that can be run in Octave or Matlab to verify the numerical results
